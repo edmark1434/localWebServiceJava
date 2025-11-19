@@ -22,3 +22,4 @@ spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
 
 paste ni sa katong imong application.properties naa located sa src/main/resources/application.properties
+pachange lang sa pass ty
