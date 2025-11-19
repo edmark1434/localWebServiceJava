@@ -4,6 +4,7 @@ import com.zkteco.biometric.FingerprintSensorEx;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,8 +36,7 @@ public class BiometricService {
         FingerprintSensorEx.Terminate();
     }
 
-    // 1️⃣ Register fingerprint
-    public Biometric registerFingerprint(Long userId) {
+    public Biometric registerFingerprintDirect(Long userId) {
         if (!initScanner()) return null;
 
         byte[] imgBuffer = new byte[2048];
@@ -54,8 +54,48 @@ public class BiometricService {
         Biometric biometric = new Biometric(userId, regTemplate);
         return biometricRepository.save(biometric);
     }
+    public byte[] scanFingerprintTemplate() {
+        if (!initScanner()) return null;
 
+        byte[] imgBuffer = new byte[2048];  // optional image buffer
+        byte[] template = new byte[2048];   // template buffer
+        int[] size = new int[]{2048};
+
+        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
+        closeScanner();
+
+        if (result != 0) return null;
+
+        byte[] capturedTemplate = new byte[size[0]];
+        System.arraycopy(template, 0, capturedTemplate, 0, size[0]);
+        return capturedTemplate;
+    }
     // 2️⃣ Verify fingerprint for a specific user
+    public boolean verifyFingerprintDirect(Long userId) {
+        Optional<Biometric> optional = biometricRepository.findByUserId(userId);
+        if (optional.isEmpty()) return false;
+
+        Biometric biometric = optional.get();
+        byte[] storedTemplate = biometric.getTemplate();
+
+        if (!initScanner()) return false;
+
+        byte[] imgBuffer = new byte[2048];
+        byte[] template = new byte[2048];
+        int[] size = new int[]{2048};
+
+        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
+        closeScanner();
+
+        if (result != 0) return false;
+
+        byte[] capturedTemplate = new byte[size[0]];
+        System.arraycopy(template, 0, capturedTemplate, 0, size[0]);
+
+        // Compare template
+        int matchResult = FingerprintSensorEx.DBMatch(dbHandle, storedTemplate, capturedTemplate);
+        return matchResult != 0;
+    }
     public boolean verifyFingerprint(Long userId) {
         Optional<Biometric> optional = biometricRepository.findByUserId(userId);
         if (optional.isEmpty()) return false;
