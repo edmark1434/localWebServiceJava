@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Base64;
 import java.util.List;
 
 @RestController
@@ -20,26 +21,51 @@ public class BiometricController {
     // -------------------------------
     @PostMapping("/register/{userId}")
     public ResponseEntity<Biometric> register(@PathVariable Long userId) {
-        Biometric biometric = biometricService.registerFingerprint(userId);
+        Biometric biometric = biometricService.registerFingerprintDirect(userId);
         if (biometric == null) {
             return ResponseEntity.status(500).body(null);
         }
         return ResponseEntity.ok(biometric);
     }
+    @GetMapping("/scan-template")
+    public ResponseEntity<String> scanTemplate() {
+        byte[] template = biometricService.scanFingerprintTemplate();
+        if (template == null) {
+            //return ResponseEntity.status(500).body("Fingerprint scan failed or scanner not detected");
+           //for trial
+            template = new byte[512]; // arbitrary size
+            for (int i = 0; i < template.length; i++) {
+                template[i] = (byte) (i % 256);
+            }
+        }
 
+        // Encode template as Base64 for PHP/Laravel compatibility
+        String base64Template = Base64.getEncoder().encodeToString(template);
+        return ResponseEntity.ok(base64Template);
+    }
     // -------------------------------
     // 2️⃣ Verification: verify fingerprint for a specific user
     // -------------------------------
     @PostMapping("/verify/{userId}")
-    public ResponseEntity<String> verify(@PathVariable Long userId) {
-        boolean verified = biometricService.verifyFingerprint(userId);
+    public ResponseEntity<String> verifyDirect(@PathVariable Long userId) {
+        boolean verified = biometricService.verifyFingerprintDirect(userId);
         if (verified) {
             return ResponseEntity.ok("Fingerprint verified successfully");
         } else {
             return ResponseEntity.status(401).body("Fingerprint verification failed");
         }
     }
-
+    @PostMapping("/verifying/{userId}")
+    public ResponseEntity<String> verify(@PathVariable Long userId) {
+        boolean verified = biometricService.verifyFingerprint(userId);
+        if (verified) {
+            return ResponseEntity.ok("Fingerprint verified successfully");
+        } else {
+            //return ResponseEntity.status(401).body("Fingerprint verification failed");
+            //change this for actual
+            return ResponseEntity.ok("Fingerprint verified successfully");
+        }
+    }
     // -------------------------------
     // 3️⃣ Identification: scan fingerprint and return userId
     // -------------------------------

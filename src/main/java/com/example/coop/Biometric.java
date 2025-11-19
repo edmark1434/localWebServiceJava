@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.Base64;
 
 @Entity
 @Table(name = "biometric_data")
@@ -37,7 +38,7 @@ public class Biometric {
     }
 
     public byte[] getTemplate() {
-        return template;
+        return Base64.getDecoder().decode(template);
     }
 
     public void setTemplate(byte[] template) {
