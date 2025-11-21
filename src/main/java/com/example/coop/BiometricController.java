@@ -20,7 +20,7 @@ public class BiometricController {
     // 1️⃣ Registration: store user_id + template
     // -------------------------------
     @PostMapping("/register/{userId}")
-    public ResponseEntity<Biometric> register(@PathVariable Long userId) {
+    public ResponseEntity<Biometric> register(@PathVariable Long userId) throws InterruptedException {
         Biometric biometric = biometricService.registerFingerprintDirect(userId);
         if (biometric == null) {
             return ResponseEntity.status(500).body(null);
@@ -28,15 +28,14 @@ public class BiometricController {
         return ResponseEntity.ok(biometric);
     }
     @GetMapping("/scan-template")
-    public ResponseEntity<String> scanTemplate() {
+    public ResponseEntity<String> scanTemplate() throws InterruptedException {
         byte[] template = biometricService.scanFingerprintTemplate();
         if (template == null) {
-            //return ResponseEntity.status(500).body("Fingerprint scan failed or scanner not detected");
-           //for trial
-            template = new byte[512]; // arbitrary size
-            for (int i = 0; i < template.length; i++) {
-                template[i] = (byte) (i % 256);
-            }
+            return ResponseEntity.status(500).body("Fingerprint scan failed or scanner not detected");
+        }
+
+        if (biometricService.identifyFingerprint() != null) {
+            return ResponseEntity.status(409).body("Fingerprint already exists in the database");
         }
 
         // Encode template as Base64 for PHP/Laravel compatibility
@@ -47,7 +46,7 @@ public class BiometricController {
     // 2️⃣ Verification: verify fingerprint for a specific user
     // -------------------------------
     @PostMapping("/verify/{userId}")
-    public ResponseEntity<String> verifyDirect(@PathVariable Long userId) {
+    public ResponseEntity<String> verifyDirect(@PathVariable Long userId) throws InterruptedException {
         boolean verified = biometricService.verifyFingerprintDirect(userId);
         if (verified) {
             return ResponseEntity.ok("Fingerprint verified successfully");
@@ -56,36 +55,26 @@ public class BiometricController {
         }
     }
     @PostMapping("/verifying/{userId}")
-    public ResponseEntity<String> verify(@PathVariable Long userId) {
+    public ResponseEntity<String> verify(@PathVariable Long userId) throws InterruptedException {
         boolean verified = biometricService.verifyFingerprint(userId);
         if (verified) {
-            return ResponseEntity.ok("Fingerprint verified successfully");
+            return ResponseEntity.ok("Fingerprint verified successfully.");
         } else {
-            //return ResponseEntity.status(401).body("Fingerprint verification failed");
-            //change this for actual
-            return ResponseEntity.ok("Fingerprint verified successfully");
+            return ResponseEntity.status(401).body("Incorrect fingerprint. Try again.");
         }
     }
     // -------------------------------
     // 3️⃣ Identification: scan fingerprint and return userId
     // -------------------------------
     @PostMapping("/identify")
-    public ResponseEntity<Long> identify() {
+    public ResponseEntity<Long> identify() throws InterruptedException {
         Long userId = biometricService.identifyFingerprint();
         if (userId == null) {
             return ResponseEntity.status(404).build();
         }
         return ResponseEntity.ok(userId);
     }
-    @GetMapping("/status")
-    public ResponseEntity<String> status() {
-        boolean ready = biometricService.isSdkReady();
-        if (ready) {
-            return ResponseEntity.ok("SDK is properly initialized and scanner is ready.");
-        } else {
-            return ResponseEntity.status(503).body("SDK initialization failed or scanner not detected.");
-        }
-    }
+
     @GetMapping("/test-store/{userId}")
     public ResponseEntity<Biometric> testStore(@PathVariable Long userId) {
         Biometric result = biometricService.testStoreFingerprint(userId);

@@ -12,6 +12,7 @@ base url = http://localhost:8080/api/biometric
 /test-store/{userId} → saves a dummy fingerprint
 
 /all → fetches all stored fingerprints
+
 spring.application.name=coop
 spring.datasource.url=jdbc:postgresql://localhost:5432/coop
 spring.datasource.username=postgres
@@ -28,34 +29,34 @@ sample calls
 const userId = 79; // example user ID
 
 fetch(`http://localhost:8080/api/biometric/register/${userId}`, {
-method: 'POST',
+  method: 'POST',
 })
-.then(res => res.json())
-.then(data => console.log('Registered fingerprint:', data))
-.catch(err => console.error(err));
+  .then(res => res.json())
+  .then(data => console.log('Registered fingerprint:', data))
+  .catch(err => console.error(err));
 
 //verify
 const userId = 79;
 
 fetch(`http://localhost:8080/api/biometric/verify/${userId}`, {
-method: 'POST',
+  method: 'POST',
 })
-.then(res => {
-if (res.status === 200) return res.text();
-else throw new Error('Verification failed');
-})
-.then(msg => console.log(msg))
-.catch(err => console.error(err));
+  .then(res => {
+    if (res.status === 200) return res.text();
+    else throw new Error('Verification failed');
+  })
+  .then(msg => console.log(msg))
+  .catch(err => console.error(err));
 
 //identify
-fetch('http://localhost:8080/api/biometric/identify', {
-method: 'POST',
+  fetch('http://localhost:8080/api/biometric/identify', {
+  method: 'POST',
 })
-.then(res => {
-if (res.status === 200) return res.json();
-else throw new Error('No match found');
-})
-.then(userId => console.log('Matched user ID:', userId))
-.catch(err => console.error(err));
+  .then(res => {
+    if (res.status === 200) return res.json();
+    else throw new Error('No match found');
+  })
+  .then(userId => console.log('Matched user ID:', userId))
+  .catch(err => console.error(err));
 
   

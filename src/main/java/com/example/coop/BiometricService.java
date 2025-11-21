@@ -1,5 +1,7 @@
 package com.example.coop;
 
+import com.zkteco.biometric.FingerprintSensor;
+import com.zkteco.biometric.FingerprintSensorErrorCode;
 import com.zkteco.biometric.FingerprintSensorEx;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,196 +16,115 @@ public class BiometricService {
     @Autowired
     private BiometricRepository biometricRepository;
 
-    private long deviceHandle = 0;
-    private long dbHandle = 0;
+    // 1️⃣ Scan fingerprint template (unchanged)
+    public byte[] scanFingerprintTemplate() throws InterruptedException {
+        FingerprintSensor sensor = new FingerprintSensor();
+        if (sensor.openDevice(0) != FingerprintSensorErrorCode.ERROR_SUCCESS) {
+            System.out.println("❌ Cannot open device");
+            return null;
+        }
 
-    // Initialize scanner and DB
-    private boolean initScanner() {
-        int init = FingerprintSensorEx.Init();
-        if (init != 0) return false;
-
-        int count = FingerprintSensorEx.GetDeviceCount();
-        if (count <= 0) return false;
-
-        deviceHandle = FingerprintSensorEx.OpenDevice(0);
-        dbHandle = FingerprintSensorEx.DBInit();
-
-        return deviceHandle != 0 && dbHandle != 0;
-    }
-
-    private void closeScanner() {
-        if (deviceHandle != 0) FingerprintSensorEx.CloseDevice(deviceHandle);
-        FingerprintSensorEx.Terminate();
-    }
-
-    public Biometric registerFingerprintDirect(Long userId) {
-        if (!initScanner()) return null;
-
-        byte[] imgBuffer = new byte[2048];
+        byte[] imgBuffer = new byte[sensor.getImageWidth() * sensor.getImageHeight()];
         byte[] template = new byte[2048];
-        int[] size = new int[]{2048};
+        int[] tplSize = new int[]{2048};
 
-        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
-        closeScanner();
+        System.out.println("Place your finger...");
 
-        if (result != 0) return null;
+        while (true) {
+            int imgResult = sensor.capture(imgBuffer, template, tplSize);
 
-        byte[] regTemplate = new byte[size[0]];
-        System.arraycopy(template, 0, regTemplate, 0, size[0]);
+            if (imgResult == FingerprintSensorErrorCode.ERROR_SUCCESS && tplSize[0] > 0) {
+                byte[] finalTpl = new byte[tplSize[0]];
+                System.arraycopy(template, 0, finalTpl, 0, tplSize[0]);
+                sensor.closeDevice();
+                return finalTpl;
+            } else if (imgResult == FingerprintSensorErrorCode.ZKFP_ERR_CAPTURE) {
+                System.out.println("Waiting for proper finger placement...");
+            }
+
+            Thread.sleep(500);
+        }
+    }
+
+    // 2️⃣ Register fingerprint
+    public Biometric registerFingerprintDirect(Long userId) throws InterruptedException {
+        byte[] regTemplate = scanFingerprintTemplate();
+        if (regTemplate == null) return null;
 
         Biometric biometric = new Biometric(userId, regTemplate);
         return biometricRepository.save(biometric);
     }
-    public byte[] scanFingerprintTemplate() {
-        if (!initScanner()) return null;
 
-        byte[] imgBuffer = new byte[2048];  // optional image buffer
-        byte[] template = new byte[2048];   // template buffer
-        int[] size = new int[]{2048};
-
-        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
-        closeScanner();
-
-        if (result != 0) return null;
-
-        byte[] capturedTemplate = new byte[size[0]];
-        System.arraycopy(template, 0, capturedTemplate, 0, size[0]);
-        return capturedTemplate;
-    }
-    // 2️⃣ Verify fingerprint for a specific user
-    public boolean verifyFingerprintDirect(Long userId) {
+    // 3️⃣ Verify fingerprint for a specific user
+    public boolean verifyFingerprintDirect(Long userId) throws InterruptedException {
         Optional<Biometric> optional = biometricRepository.findByUserId(userId);
         if (optional.isEmpty()) return false;
 
-        Biometric biometric = optional.get();
-        byte[] storedTemplate = biometric.getTemplate();
+        byte[] storedTemplate = optional.get().getTemplate();
+        byte[] capturedTemplate = scanFingerprintTemplate();
+        if (capturedTemplate == null) return false;
 
-        if (!initScanner()) return false;
-
-        byte[] imgBuffer = new byte[2048];
-        byte[] template = new byte[2048];
-        int[] size = new int[]{2048};
-
-        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
-        closeScanner();
-
-        if (result != 0) return false;
-
-        byte[] capturedTemplate = new byte[size[0]];
-        System.arraycopy(template, 0, capturedTemplate, 0, size[0]);
-
-        // Compare template
+        long dbHandle = FingerprintSensorEx.DBInit();
         int matchResult = FingerprintSensorEx.DBMatch(dbHandle, storedTemplate, capturedTemplate);
-        return matchResult != 0;
-    }
-    public boolean verifyFingerprint(Long userId) {
-        Optional<Biometric> optional = biometricRepository.findByUserId(userId);
-        if (optional.isEmpty()) return false;
+        FingerprintSensorEx.DBFree(dbHandle);
 
-        Biometric biometric = optional.get();
-        byte[] storedTemplate = biometric.getTemplate();
-
-        if (!initScanner()) return false;
-
-        byte[] imgBuffer = new byte[2048];
-        byte[] template = new byte[2048];
-        int[] size = new int[]{2048};
-
-        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
-        closeScanner();
-
-        if (result != 0) return false;
-
-        byte[] capturedTemplate = new byte[size[0]];
-        System.arraycopy(template, 0, capturedTemplate, 0, size[0]);
-
-        // Compare template
-        int matchResult = FingerprintSensorEx.DBMatch(dbHandle, storedTemplate, capturedTemplate);
         return matchResult != 0;
     }
 
-    // 3️⃣ Identify fingerprint among all users
-    public Long identifyFingerprint() {
+    // 4️⃣ Another verify method
+    public boolean verifyFingerprint(Long userId) throws InterruptedException {
+        return verifyFingerprintDirect(userId); // reuse
+    }
+
+    // 5️⃣ Identify fingerprint among all users
+    public Long identifyFingerprint() throws InterruptedException {
         List<Biometric> allBiometrics = biometricRepository.findAll();
         if (allBiometrics.isEmpty()) return null;
+        System.out.println(System.getProperty("os.arch"));
+        System.out.println(System.getProperty("java.home"));
+        byte[] capturedTemplate = scanFingerprintTemplate();
+        if (capturedTemplate == null) return null;
 
-        if (!initScanner()) return null;
-
-        byte[] imgBuffer = new byte[2048];
-        byte[] template = new byte[2048];
-        int[] size = new int[]{2048};
-
-        int result = FingerprintSensorEx.AcquireFingerprint(deviceHandle, imgBuffer, template, size);
-        if (result != 0) {
-            closeScanner();
-            return null;
-        }
-
-        byte[] capturedTemplate = new byte[size[0]];
-        System.arraycopy(template, 0, capturedTemplate, 0, size[0]);
+        long dbHandle = FingerprintSensorEx.DBInit();
 
         for (Biometric b : allBiometrics) {
-            int match = FingerprintSensorEx.DBMatch(dbHandle, b.getTemplate(), capturedTemplate);
-            if (match != 0) {
-                closeScanner();
-                return b.getUserId();
+            byte[] stored = b.getTemplate();
+            if (stored == null || stored.length == 0 || capturedTemplate == null || capturedTemplate.length == 0) {
+                continue; // skip invalid templates
+            }
+
+            try {
+                int match = FingerprintSensorEx.DBMatch(dbHandle, stored, capturedTemplate);
+                if (match != 0) {
+                    FingerprintSensorEx.DBFree(dbHandle);
+                    return b.getUserId();
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ DBMatch failed for userId " + b.getUserId());
+                e.printStackTrace();
+                continue; // skip this template
             }
         }
 
-        closeScanner();
-        return null; // No match
-    }
-    // Health check for SDK
-    public boolean isSdkReady() {
-        int init = FingerprintSensorEx.Init();
-        if (init != 0) return false;
-
-        int deviceCount = FingerprintSensorEx.GetDeviceCount();
-        if (deviceCount <= 0) {
-            FingerprintSensorEx.Terminate();
-            return false;
-        }
-
-        deviceHandle = FingerprintSensorEx.OpenDevice(0);
-        if (deviceHandle == 0) {
-            FingerprintSensorEx.Terminate();
-            return false;
-        }
-
-        dbHandle = FingerprintSensorEx.DBInit();
-        if (dbHandle == 0) {
-            FingerprintSensorEx.CloseDevice(deviceHandle);
-            FingerprintSensorEx.Terminate();
-            return false;
-        }
-
-        // Close handles after checking
         FingerprintSensorEx.DBFree(dbHandle);
-        FingerprintSensorEx.CloseDevice(deviceHandle);
-        FingerprintSensorEx.Terminate();
-
-        return true;
+        return null;
     }
-    // Test saving a dummy fingerprint to DB
+
+
+    // 6️⃣ Test saving a dummy fingerprint
     public Biometric testStoreFingerprint(Long userId) {
         try {
-            // Create a dummy template (fake fingerprint)
-            byte[] dummyTemplate = new byte[512]; // arbitrary size
-            for (int i = 0; i < dummyTemplate.length; i++) {
-                dummyTemplate[i] = (byte) (i % 256);
-            }
+            byte[] dummyTemplate = new byte[512];
+            for (int i = 0; i < dummyTemplate.length; i++) dummyTemplate[i] = (byte) (i % 256);
 
             Biometric biometric = new Biometric(userId, dummyTemplate);
-
-            // Save to database
-            Biometric saved = biometricRepository.save(biometric);
-
-            return saved; // return saved object
+            return biometricRepository.save(biometric);
         } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
     }
+
     public List<Biometric> getAllBiometrics() {
         return biometricRepository.findAll();
     }
