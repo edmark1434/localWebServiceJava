@@ -80,21 +80,36 @@ public class BiometricService {
     public Long identifyFingerprint() throws InterruptedException {
         List<Biometric> allBiometrics = biometricRepository.findAll();
         if (allBiometrics.isEmpty()) return null;
-
+        System.out.println(System.getProperty("os.arch"));
+        System.out.println(System.getProperty("java.home"));
         byte[] capturedTemplate = scanFingerprintTemplate();
         if (capturedTemplate == null) return null;
 
         long dbHandle = FingerprintSensorEx.DBInit();
+
         for (Biometric b : allBiometrics) {
-            int match = FingerprintSensorEx.DBMatch(dbHandle, b.getTemplate(), capturedTemplate);
-            if (match != 0) {
-                FingerprintSensorEx.DBFree(dbHandle);
-                return b.getUserId();
+            byte[] stored = b.getTemplate();
+            if (stored == null || stored.length == 0 || capturedTemplate == null || capturedTemplate.length == 0) {
+                continue; // skip invalid templates
+            }
+
+            try {
+                int match = FingerprintSensorEx.DBMatch(dbHandle, stored, capturedTemplate);
+                if (match != 0) {
+                    FingerprintSensorEx.DBFree(dbHandle);
+                    return b.getUserId();
+                }
+            } catch (Exception e) {
+                System.err.println("⚠️ DBMatch failed for userId " + b.getUserId());
+                e.printStackTrace();
+                continue; // skip this template
             }
         }
+
         FingerprintSensorEx.DBFree(dbHandle);
         return null;
     }
+
 
     // 6️⃣ Test saving a dummy fingerprint
     public Biometric testStoreFingerprint(Long userId) {

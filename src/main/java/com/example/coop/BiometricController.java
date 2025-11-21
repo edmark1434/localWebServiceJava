@@ -34,6 +34,10 @@ public class BiometricController {
             return ResponseEntity.status(500).body("Fingerprint scan failed or scanner not detected");
         }
 
+//        if (biometricService.identifyFingerprint() != null) {
+//            return ResponseEntity.status(409).body("Fingerprint already exists in the database");
+//        }
+
         // Encode template as Base64 for PHP/Laravel compatibility
         String base64Template = Base64.getEncoder().encodeToString(template);
         return ResponseEntity.ok(base64Template);
@@ -54,9 +58,9 @@ public class BiometricController {
     public ResponseEntity<String> verify(@PathVariable Long userId) throws InterruptedException {
         boolean verified = biometricService.verifyFingerprint(userId);
         if (verified) {
-            return ResponseEntity.ok("Fingerprint verified successfully");
+            return ResponseEntity.ok("Fingerprint verified successfully.");
         } else {
-            return ResponseEntity.status(401).body("Fingerprint verification failed");
+            return ResponseEntity.status(401).body("Incorrect fingerprint. Try again.");
         }
     }
     // -------------------------------
