@@ -34,9 +34,9 @@ public class BiometricController {
             return ResponseEntity.status(500).body("Fingerprint scan failed or scanner not detected");
         }
 
-//        if (biometricService.identifyFingerprint() != null) {
-//            return ResponseEntity.status(409).body("Fingerprint already exists in the database");
-//        }
+        if (biometricService.identifyFingerprint() != null) {
+            return ResponseEntity.status(409).body("Fingerprint already exists in the database");
+        }
 
         // Encode template as Base64 for PHP/Laravel compatibility
         String base64Template = Base64.getEncoder().encodeToString(template);
